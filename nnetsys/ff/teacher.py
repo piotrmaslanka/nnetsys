@@ -54,7 +54,7 @@ class MinibatchSGDTeacher(object):
                                           learning_rate=0.1, 
                                           momentum=0, 
                                           l1=None, 
-                                          l2=None, 
+                                          l2=None,
                                           dtype=theano.config.floatX):
         """
         Initialize the teacher.        
@@ -86,7 +86,6 @@ class MinibatchSGDTeacher(object):
             for parameter in self.ff_net.get_parameters()
         ]
 
-
         self.train_model = theano.function(
             inputs = [self.index],
             outputs=self.lossfun,
@@ -112,12 +111,19 @@ class MinibatchSGDTeacher(object):
                             self.ff_net.get_learning_passthrough(self.x)
                          )[T.arange(self.y.shape[0]), self.y]
                       )
-        if l1 is not None:
-            q = q + self.ff_net.l1 * l1
-        
-        if l2 is not None:
-            q = q + self.ff_net.l2 * l2
-            
+
+        try:
+            if l1 is not None:
+                q = q + self.ff_net.l1 * l1
+        except AttributeError:
+            pass
+
+        try:
+            if l2 is not None:
+                q = q + self.ff_net.l2 * l2
+        except AttributeError:
+            pass
+
         return q
 
 

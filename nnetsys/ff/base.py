@@ -7,6 +7,7 @@ to aggregate layers into a logical layer
 """
 import theano
 import theano.tensor as T
+from theano.tensor.signal import downsample
 import numpy as np
 
 __all__ = ('Perceptron', 'Network')
@@ -15,32 +16,104 @@ class FeedforwardLayer(object):
     """
     ABSTRACT. Base class for feedforward layers.
     """
-    
-    def __init__(self, n_in, n_out):
-        """
-        :param n_in: Number of inputs
-        :param n_out: Number of outputs
-        """
-        
-        self.n_in = n_in      #: public attribute
-        self.n_out = n_out    #: public attribute
-        
-        # self.l1- declare that if L1 norm can be computed. L1 norm is a Theano graph
-        # self.l2- declare that if L2 norm can be computed. L2 norm is a Theano graph
-        
+
     def get_parameters(self):
         """Return a list of (Theano shared variables) which are parameters of this layer"""
         return []
 
     def get_passthrough(self, x):
         """Return a function that given NIN-dimensional input x (Theano symbolic) returns
+
+         Please note that x is always a minibatch - first dimension specifies number of batches
+
            NOUT-dimensional output"""
         return None
 
     def get_learning_passthrough(self, x):
         """a get_passthrough() used only when learning. 
-        This is left to implement things like dropout"""
+        This is left to implement things like dropout, where learning function differs from classification function"""
         return None
+
+
+
+class MaxpoolingLayer(FeedforwardLayer):
+    def __init__(self, mp_width, mp_height):
+        """
+        Layer that performs max-pooling
+        :param mp_width: width of max-pool field
+        :param mp_height: height of max-pool field
+        """
+        FeedforwardLayer.__init__(self)
+
+        self.shape = mp_width, mp_height
+
+    def get_parameters(self):
+        return []
+
+    def get_passthrough(self, x):
+        return downsample.max_pool_2d(x, self.shape, ignore_border=True)
+
+    def get_learning_passthrough(self, x):
+        return self.get_passthrough(x)
+
+
+class ConvolutionalLayer(FeedforwardLayer):
+    def __init__(self, flt_width, flt_height, img_channels, n_filters, activation='tanh', rng=None, dtype=theano.config.floatX):
+        """
+        Construct a convolutional layer
+        :param flt_width: Filter width (third dimension)
+        :param flt_height: Filter height (fourth dimension)
+        :param img_channels: Image channels (second dimension)
+        :param n_filters: Number of filters to be internally utilized by the convo layer
+        :param activation: one of 'sigmoid' or 'tanh'
+        :param rng: Random number generator object. None for default
+        :param dtype: default type of a float
+        """
+        FeedforwardLayer.__init__(self)
+
+        self.rng = rng or np.random.RandomState(0)
+
+        self.flt_width = flt_width
+        self.flt_height = flt_height
+        self.img_channels = img_channels
+        self.n_filters = n_filters
+
+
+        w_bound = np.sqrt(img_channels * flt_width * flt_height)
+        self.W = theano.shared( np.asarray(
+            self.rng.uniform(
+                low=-1.0 / w_bound,
+                high=1.0 / w_bound,
+                size=(n_filters, img_channels, flt_width, flt_height)),
+            dtype=dtype), name ='W')
+
+        self.B = theano.shared(np.asarray(
+            np.zeros(shape=(n_filters, )),
+            dtype=dtype), name='B')
+
+        if activation == 'sigmoid':
+            self.activation = T.nnet.sigmoid
+        elif activation == 'tanh':
+            self.activation = T.tanh
+
+    def get_parameters(self):
+        return [self.W, self.B]
+
+    def get_passthrough(self, x):
+        """
+        Note that x will be expected to be a 4D tensor, not a 1D tensor!
+        """
+        return self.activation(T.nnet.conv2d(x, self.W) + self.B.dimshuffle('x', 0, 'x', 'x'))
+
+    def get_learning_passthrough(self, x):
+        return self.get_passthrough(x)
+
+    def __repr__(self):
+        return '<Convolution f:%s c:%s w:%s h:%s (%s)>' % (self.n_filters, self.img_channels,
+                                                           self.flt_width, self.flt_height,
+                                                           self.activation_name)
+
+
 
 class Perceptron(FeedforwardLayer):
     """
@@ -57,9 +130,11 @@ class Perceptron(FeedforwardLayer):
         :param rng: numpy RandomState instance. If left default (None) one will be created
         :param dtype: internal Theano datatype
         """
-        
-        FeedforwardLayer.__init__(self, n_in, n_out)
-        
+        FeedforwardLayer.__init__(self)
+
+        self.n_in = n_in
+        self.n_out = n_out
+
         self.rng = rng or np.random.RandomState(0)
         
         self.activation_name = activation        
@@ -154,6 +229,8 @@ class Network(FeedforwardLayer):
         
         :param layers: list of layers
         """
+        FeedforwardLayer.__init__(self)
+
         self.layers = layers
         
         can_l1 = True       
@@ -171,8 +248,6 @@ class Network(FeedforwardLayer):
         if can_l2:
             self.l2 = sum([x.l2 for x in layers])
 
-
-        FeedforwardLayer.__init__(self, self.layers[0].n_in, self.layers[-1].n_out)
 
     def get_parameters(self):
         a = []
