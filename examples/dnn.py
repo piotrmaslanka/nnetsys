@@ -16,14 +16,14 @@ data = [(
 
 
 nnet = Network(
-            Perceptron(28*28, 500, activation='relu', dropout=0.1),
-            Perceptron(500, 300, activation='relu', dropout=0.1),
-            Perceptron(300, 100, activation='relu', dropout=0.1),
-            Perceptron(100, 30, activation='relu', dropout=0.1),
+            Perceptron(28*28, 500, activation='relu', dropout=0.5),
+            Perceptron(500, 300, activation='relu', dropout=0.5),
+            Perceptron(300, 100, activation='relu', dropout=0.5),
+            Perceptron(100, 30, activation='relu', dropout=0.5),
             Perceptron(30, 10, activation='softmax')
    )
 
-teacher = MinibatchSGDTeacher(nnet, data[0], batch_size=500, learning_rate=0.1)
+teacher = MinibatchSGDTeacher(nnet, data[0], batch_size=100, learning_rate=0.1)
 validator = Validator(nnet, data[1])
 test_validator = Validator(nnet, data[2])
 
