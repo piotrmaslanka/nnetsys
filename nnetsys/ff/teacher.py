@@ -14,7 +14,8 @@ import numpy as np
 
 class Validator(object):
     """
-    A network validator
+    A network validator. Used to compute statistics about given neural network in 
+    context of a validation/test set.
     """
     def __init__(self, ff_net, validate_set):
         """
@@ -25,7 +26,9 @@ class Validator(object):
         """        
         self.ff_net = ff_net
         self.validate_set_x, self.validate_set_y = validate_set
-        self.x = T.dmatrix('x')
+        self.x = T.matrix('x', dtype=theano.config.floatX)
+
+        self.classes = max(self.validate_set_y.get_value())+1
 
         shape = self.validate_set_x.get_value().shape[0]
 
@@ -38,8 +41,28 @@ class Validator(object):
                                                   ), self.validate_set_y)
                                          ) / shape)
 
+        self.classify = theano.function([self.x],
+                                T.argmax(
+                                            ff_net.get_passthrough(self.x),
+                                            axis=1
+                                ))
+
+    def calculate_confusion_matrix(self):
+        """
+        Return a confusion matrix. First dimension is the computed value, second - the true value
+        """
+        confusion_matrix = np.zeros((self.classes, self.classes), dtype=np.int32)
+
+        vals = self.classify(self.validate_set_x.get_value())
+
+        for computed_val, true_val in zip(vals, self.validate_set_y.get_value()):
+            confusion_matrix[computed_val][true_val] += 1
+
+        return confusion_matrix
+
     def validate(self):
-        """Return a percentage of correctly classified entries"""
+        """Return a fraction of correctly classified entries.
+        :return: 0 <= x <= 1"""
         return self._validate()
     
     def __repr__(self):

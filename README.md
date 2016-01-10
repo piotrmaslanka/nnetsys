@@ -26,3 +26,5 @@ nnetsys supports:
 * multilayer perceptrons (sigmoid, tanh)
 * deep neural networks (relu + dropout)
 * convolutional neural networks
+
+Under the hood nnetsys uses Theano, so it runs pretty damn fast.
