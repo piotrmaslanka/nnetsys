@@ -49,6 +49,8 @@ class MinibatchSGDTeacher(object):
     """
     Minibatch stochastic gradient descent teacher with momentum support.
     This teacher uses mean negative log-likelihood as loss function, with optional L1 and L2 terms
+    
+    Single epoch means iterating over every minibatch
     """
     def __init__(self, ff_net, train_set, batch_size=10, 
                                           learning_rate=0.1, 
