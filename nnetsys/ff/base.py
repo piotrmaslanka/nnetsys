@@ -5,6 +5,7 @@ to aggregate layers into a logical layer
 
 :author: Piotr Maślanka
 """
+from __future__ import division
 import theano
 import theano.tensor as T
 from theano.tensor.signal import downsample
@@ -156,7 +157,7 @@ class Perceptron(FeedforwardLayer):
             self.activation = T.tanh
         elif activation == 'relu':
             w = np.asarray(
-                self.rng.normal(0, 0.2, size=(n_in, n_out)),
+                self.rng.normal(0, 1 / n_in, size=(n_in, n_out)),
                 dtype=dtype
             )
             b = np.zeros((n_out, ), dtype=dtype)
@@ -191,7 +192,7 @@ class Perceptron(FeedforwardLayer):
         self.dropout = dropout
 
     def get_learning_passthrough(self, x):
-        ptx = self.get_passthrough(x)        
+        ptx = self.get_passthrough(x)
         
         if self.dropout == 0:
             return ptx
