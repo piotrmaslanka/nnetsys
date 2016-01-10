@@ -78,12 +78,16 @@ class ConvolutionalLayer(FeedforwardLayer):
         self.img_channels = img_channels
         self.n_filters = n_filters
 
+        n_in = img_channels*flt_width*flt_height
+        n_out = n_filters*flt_width*flt_height
+        
+        bound = np.sqrt(.6 / (n_in + n_out))
 
         w_bound = np.sqrt(img_channels * flt_width * flt_height)
         self.W = theano.shared( np.asarray(
             self.rng.uniform(
-                low=-1.0 / w_bound,
-                high=1.0 / w_bound,
+                low=-bound,
+                high=bound,
                 size=(n_filters, img_channels, flt_width, flt_height)),
             dtype=dtype), name ='W')
 
