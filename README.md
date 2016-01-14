@@ -6,13 +6,13 @@ nnetsys
 For example, if you wanted to train a simple DNN, you would just type:
 
 ```python
-from nnetsys.ff import Network, Perceptron, MinibatchSGDTeacher
+from nnetsys.ff import Network, PerceptronLayer, MinibatchSGDTeacher
 
 net = Network(
-    Perceptron(500, 300, activation='relu', dropout=0.5),
-    Perceptron(300, 200, activation='relu', dropout=0.5),
-    Perceptron(200, 50, activation='relu', dropout=0.5),
-    Perceptron(50, 10, activation='softmax')
+    PerceptronLayer(500, 300, activation='relu', dropout=0.5),
+    PerceptronLayer(300, 200, activation='relu', dropout=0.5),
+    PerceptronLayer(200, 50, activation='relu', dropout=0.5),
+    PerceptronLayer(50, 10, activation='softmax')
     )
     
 teacher = MinibatchSGDTeacher(net, training_data, batch_size=10, learning_rate=0.1)

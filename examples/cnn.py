@@ -29,7 +29,7 @@ classifier = Classifier(nnet)
 
 for i in xrange(0, 100):
 
-    error = validator.validate() * 100
+    error = validator.validate() *100
     print('Accuracy is %s%%' % (error, ))
 
 #    teacher.learning_rate = 1 / (i+2)

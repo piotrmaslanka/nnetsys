@@ -12,62 +12,6 @@ import theano.tensor as T
 import numpy as np
 
 
-class Validator(object):
-    """
-    A network validator. Used to compute statistics about given neural network in 
-    context of a validation/test set.
-    """
-    def __init__(self, ff_net, validate_set):
-        """
-        Initialize the validator    
-        
-        :param ff_net: a Network to validate
-        :param train_set: a training set. A tuple of (X values vector, Y values vector)
-        """        
-        self.ff_net = ff_net
-        self.validate_set_x, self.validate_set_y = validate_set
-        self.x = T.matrix('x', dtype=theano.config.floatX)
-
-        self.classes = max(self.validate_set_y.get_value())+1
-
-        shape = self.validate_set_x.get_value().shape[0]
-
-        self._validate = theano.function([], 
-                                         T.sum(
-                                         T.eq(
-                                         T.argmax(
-                                                  ff_net.get_passthrough(self.validate_set_x), 
-                                                  axis=1
-                                                  ), self.validate_set_y)
-                                         ) / shape)
-
-        self.classify = theano.function([self.x],
-                                T.argmax(
-                                            ff_net.get_passthrough(self.x),
-                                            axis=1
-                                ))
-
-    def calculate_confusion_matrix(self):
-        """
-        Return a confusion matrix. First dimension is the computed value, second - the true value
-        """
-        confusion_matrix = np.zeros((self.classes, self.classes), dtype=np.int32)
-
-        vals = self.classify(self.validate_set_x.get_value())
-
-        for computed_val, true_val in zip(vals, self.validate_set_y.get_value()):
-            confusion_matrix[computed_val][true_val] += 1
-
-        return confusion_matrix
-
-    def validate(self):
-        """Return a fraction of correctly classified entries.
-        :return: 0 <= x <= 1"""
-        return self._validate()
-    
-    def __repr__(self):
-        return '<Validator over %s>' % (repr(self.ff_net), )
-
 class MinibatchSGDTeacher(object):
     """
     Minibatch stochastic gradient descent teacher with momentum support.
@@ -77,7 +21,6 @@ class MinibatchSGDTeacher(object):
     """
     def __init__(self, ff_net, train_set, batch_size=10, 
                                           learning_rate=0.1, 
-                                          momentum=0, 
                                           l1=None, 
                                           l2=None,
                                           dtype=theano.config.floatX):
@@ -88,7 +31,6 @@ class MinibatchSGDTeacher(object):
         :param train_set: a training set. A tuple of (X values vector, Y values vector)
         :param batch_size: minibatch size
         :param alpha: starting learning rate
-        :param momentum: starting momentum
         :param l1: weight of L1 term. None (default) for no L1 term
         :param l2: weight of L2 term. None (default) for no L2 term
         :param dtype: target types for x and y. Leave default for GPU-friendly
@@ -102,7 +44,10 @@ class MinibatchSGDTeacher(object):
         self.batch_count = self.train_set_x.get_value(borrow=True).shape[0] // batch_size
         self.x = T.matrix('x', dtype=dtype)
         self.y = T.ivector('y')
-        self.index = T.iscalar()        # minibatch index      
+        self.index = T.iscalar()        # minibatch index
+
+        self.l1 = l1
+        self.l2 = l2
         
         self.lossfun = self.get_lossfun(l1, l2)
         
@@ -112,7 +57,7 @@ class MinibatchSGDTeacher(object):
         ]
 
         self.train_model = theano.function(
-            inputs = [self.index],
+            inputs=[self.index],
             outputs=self.lossfun,
             updates=self.updates,
             givens={
@@ -120,9 +65,10 @@ class MinibatchSGDTeacher(object):
                 self.y: self.train_set_y[self.index*self.batch_size : (self.index+1)*self.batch_size],
             }
         )
+    
 
 
-    def get_lossfun(self, l1=None, l2=None):
+    def get_lossfun(self, l1, l2):
         """
         Generate a loss function
         
@@ -131,11 +77,18 @@ class MinibatchSGDTeacher(object):
         :param l1: weight of L1 term, None for no L1 term
         :param l2: weight of L2 term, None for no L2 term
         """
-        q = -T.mean(
-                    T.log(
-                            self.ff_net.get_learning_passthrough(self.x)
-                         )[T.arange(self.y.shape[0]), self.y]
-                      )
+
+        if self.ff_net.layers[-1].activation_name == 'softmax':
+                q = -T.mean(     # minimize negative log-likelihood
+                        T.log(
+                                self.ff_net.get_learning_passthrough(self.x)
+                             )
+                            [T.arange(self.y.shape[0]), self.y]
+                          )
+        else:
+            q = T.mean(     # minimize error function
+                        (self.ff_net.get_learning_passthrough(self.x) - self.y)**2
+            )
 
         try:
             if l1 is not None:
@@ -153,19 +106,6 @@ class MinibatchSGDTeacher(object):
 
 
     @property
-    def momentum(self):
-        """Get current momentum value"""
-        try:
-            return self._momentum.get_value()
-        except AttributeError:
-            return 0.0
-
-    @momentum.setter
-    def momentum(self, value):
-        """Set new momentum value"""
-        self._momentum.set_value(value)
-
-    @property
     def learning_rate(self):
         """Get current learning rate"""
         return self._learning_rate.get_value()
@@ -175,8 +115,30 @@ class MinibatchSGDTeacher(object):
         """Set new learning rate"""
         self._learning_rate.set_value(np.float32(value))
         
-    def train_epoch(self):
-        for minibatch_index in xrange(0, self.batch_count):
-            self.train_model(minibatch_index)
-        
-        
+    def train_epoch(self, returning=None):
+        """
+        :param returning: What metric should this return?
+            None - nothing
+            'max' - maximum loss function
+            'mean' - mean loss function
+            'last' - last loss
+        """
+        if returning is None:
+            for minibatch_index in xrange(self.batch_count):
+                self.train_model(minibatch_index)
+        elif returning == 'last':
+            for minibatch_index in xrange(self.batch_count):
+                q = self.train_model(minibatch_index)
+            return q
+        else:
+            nt = np.zeros(self.batch_count)
+
+            for minibatch_index in xrange(0,self.batch_count):
+                nt[minibatch_index] = self.train_model(minibatch_index)
+
+            if returning == 'max':
+                return np.max(nt)
+            elif returning == 'mean':
+                return np.mean(nt)
+            else:
+                raise ValueError('What should I return?')

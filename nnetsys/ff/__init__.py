@@ -1,3 +1,3 @@
-from .base import Network, Perceptron, Classifier, ConvolutionalLayer, MaxpoolingLayer
-from .teacher import MinibatchSGDTeacher, Validator
-from .utils import ReshapeLayer
+from .teacher import MinibatchSGDTeacher
+from .utils import ReshapeLayer, Classifier, Evaluator, Validator
+from .layers import ConvolutionalLayer, MaxpoolingLayer, Network, PerceptronLayer

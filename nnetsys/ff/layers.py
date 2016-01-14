@@ -1,17 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-This module contains classes that are feed-forward layers or provide capability 
-to aggregate layers into a logical layer
-
-:author: Piotr Maślanka
-"""
 from __future__ import division
 import theano
 import theano.tensor as T
 from theano.tensor.signal import downsample
 import numpy as np
 
-__all__ = ('Perceptron', 'Network')
 
 class FeedforwardLayer(object):
     """
@@ -31,7 +23,7 @@ class FeedforwardLayer(object):
         return None
 
     def get_learning_passthrough(self, x):
-        """a get_passthrough() used only when learning. 
+        """a get_passthrough() used only when learning.
         This is left to implement things like dropout, where learning function differs from classification function"""
         return None
 
@@ -81,7 +73,7 @@ class ConvolutionalLayer(FeedforwardLayer):
 
         n_in = img_channels*flt_width*flt_height
         n_out = n_filters*flt_width*flt_height
-        
+
         bound = np.sqrt(.6 / (n_in + n_out))
 
         w_bound = np.sqrt(img_channels * flt_width * flt_height)
@@ -120,7 +112,7 @@ class ConvolutionalLayer(FeedforwardLayer):
 
 
 
-class Perceptron(FeedforwardLayer):
+class PerceptronLayer(FeedforwardLayer):
     """
     A single layer of neurons - a perceptron with relu/sigmoid/tanh/softmax activation
     """
@@ -141,13 +133,13 @@ class Perceptron(FeedforwardLayer):
         self.n_out = n_out
 
         self.rng = rng or np.random.RandomState(0)
-        
-        self.activation_name = activation        
-        
+
+        self.activation_name = activation
+
         if activation == 'tanh':
             w = np.asarray(
                 self.rng.uniform(
-                    low=-np.sqrt(6. / (n_in + n_out)),
+                    low=-np.sqrt(6. / (n_in + n_out)),      # glorot
                     high=np.sqrt(6. / (n_in + n_out)),
                     size=(n_in, n_out)
                 ),
@@ -160,11 +152,12 @@ class Perceptron(FeedforwardLayer):
                 self.rng.normal(0, 1 / n_in, size=(n_in, n_out)),
                 dtype=dtype
             )
-            b = np.zeros((n_out, ), dtype=dtype)
+            b = np.zeros((n_out, ), dtype=dtype) + 0.1
             try:
                 self.activation = T.nnet.relu   # supported in Theano 0.7.2+
             except AttributeError:
-                self.activation = T.nnet.softplus    # almost same thing
+                self.activation = lambda x: T.maximum(x, 0)
+
         elif activation == 'sigmoid':
             w = np.asarray(
                 self.rng.uniform(
@@ -175,30 +168,31 @@ class Perceptron(FeedforwardLayer):
                 dtype=dtype
             )
             b = np.zeros((n_out, ), dtype=dtype)
-            self.activation = T.nnet.sigmoid    
+
+            self.activation = T.nnet.sigmoid
         elif activation == 'softmax':
             w = np.zeros((n_in, n_out), dtype=dtype)
             b = np.zeros((n_out, ), dtype=dtype)
             self.activation = T.nnet.softmax
         else:
             raise ValueError('Invalid activation function. Use relu/tanh/sigmoid/softmax')
-            
+
         self.W = theano.shared(w)
-        self.B = theano.shared(b)      
-        
+        self.B = theano.shared(b)
+
         self.l1 = abs(self.W).sum()
-        self.l2 = abs(self.W ** 2).sum()
-        
+        self.l2 = (self.W ** 2).sum()
+
         self.dropout = dropout
 
     def get_learning_passthrough(self, x):
         ptx = self.get_passthrough(x)
-        
+
         if self.dropout == 0:
             return ptx
         else:
             # build a mask
-            srng = T.shared_randomstreams.RandomStreams(self.rng.randint(999999))        
+            srng = T.shared_randomstreams.RandomStreams(self.rng.randint(999999))
                 # p=1-p because 1's indicate keep and p is prob of dropping
             mask = srng.binomial(n=1, p=1-self.dropout, size=(x.shape[0], self.n_out))
             # The cast is important because int * float32 = float64 which pulls things off the gpu
@@ -211,42 +205,42 @@ class Perceptron(FeedforwardLayer):
             return self.activation(T.dot(x,self.W * self.dropout)+self.B)
 
     def get_parameters(self):
-        return [self.W, self.B]            
-            
+        return [self.W, self.B]
+
     def __repr__(self):
         return '<Perceptron %s->%s (%s)>' % (self.n_in, self.n_out, self.activation_name)
-            
-            
+
+
 class Network(FeedforwardLayer):
     """
     A virtual layer that represents a bunch of feed-forward layers.
-    
+
     It is used to construct feed-forward neural networks. Use it like:
-    
-        s = Network(Perceptron(200, 100), 
-                    Perceptron(100, 50), 
+
+        s = Network(Perceptron(200, 100),
+                    Perceptron(100, 50),
                     Perceptron(50, 5, activation='softmax'))
     """
 
     def __init__(self, *layers):
         """
-        Build the network.        
-        
+        Build the network.
+
         :param layers: list of layers
         """
         FeedforwardLayer.__init__(self)
 
         self.layers = layers
-        
-        can_l1 = True       
+
+        can_l1 = True
         can_l2 = True
-        
+
         for layer in layers:
             if not isinstance(layer, FeedforwardLayer):
                 raise ValueError('All layers must be feed-forward')
             can_l1 = can_l1 and hasattr(layer, 'l1')
             can_l2 = can_l2 and hasattr(layer, 'l2')
-            
+
         if can_l1:
             self.l1 = sum([x.l1 for x in layers])
 
@@ -272,28 +266,6 @@ class Network(FeedforwardLayer):
         for layer in self.layers[1:]:
             pt = layer.get_learning_passthrough(pt)
         return pt
-            
+
     def __repr__(self):
         return '<Network %s->%s (%s layers)>' % (self.n_in, self.n_out, len(self.layers))
-            
-            
-class Classifier(object):
-    """
-    A wrapper around a Network to make it into a classifier.
-    
-    Classifier assumes the last layer is done using softmax
-    """
-    
-    def __init__(self, net, dtype=theano.config.floatX):
-        self.ff_net = net
-        self.x = T.matrix('x', dtype=dtype)
-        
-        self.classify = theano.function([self.x],
-                                T.argmax(
-                                             net.get_passthrough(self.x), 
-                                             axis=1
-                                         )                                        
-                                        )
-        
-    def __repr__(self):
-        return '<Classifier over %s>' % (repr(self.ff_net), )
