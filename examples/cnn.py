@@ -3,7 +3,7 @@ from __future__ import print_function
 import theano, numpy as np, pickle
 
 from nnetsys.ff import Network, PerceptronLayer, MinibatchSGDTeacher, Validator, Classifier, ConvolutionalLayer, \
-                       ReshapeLayer, MaxpoolingLayer, LossFunctionComputer
+                       ReshapeLayer, MaxpoolingLayer
 
 data = pickle.load(open('../mnist.pkl', 'rb'))
 data = [(
@@ -25,16 +25,14 @@ nnet = Network(
    )
 
 teacher = MinibatchSGDTeacher(nnet, data[0], batch_size=500, learning_rate=0.1)
-loss_comp = LossFunctionComputer(nnet, data[1], batch_size=250)
+verifier = Validator(nnet, data[1])
 validator = Validator(nnet, data[2])
 classifier = Classifier(nnet)
 
 for i in xrange(0, 100):
 
-    error = validator.validate() *100
-    print('Accuracy is %s%%' % (error, ))
-
-    print('Loss function for validation data set is %s' % (loss_comp.compute_loss(returning='mean'), ))
+    print('Accuracy is %s%%' % (validator.validate() *100, ))
+    print('Loss function for validation data set is %s' % (verifier.calculate_loss(returning='mean'), ))
 
 #    teacher.learning_rate = 1 / (i+2)
     teacher.train_epoch()

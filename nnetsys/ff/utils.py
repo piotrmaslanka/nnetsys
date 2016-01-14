@@ -3,23 +3,26 @@ from .layers import FeedforwardLayer
 import theano
 import theano.tensor as T
 import numpy as np
+from .teacher import MinibatchSGDTeacher
 
-class Validator(object):
+class Validator(MinibatchSGDTeacher):
     """
     A network validator. Used to compute statistics about given neural network in
     context of a validation/test set.
     """
-    def __init__(self, ff_net, validate_set):
+    def __init__(self, ff_net, validate_set, l1=0, l2=0):
         """
         Initialize the validator
 
         :param ff_net: a Network to validate
         :param train_set: a training set. A tuple of (X values vector, Y values vector)
+        :param l1: specify optionally if you want to use a loss function with L1 regularization
+        :param l2: specify optionally if you want to use a loss function with L2 regularization
         """
         self.ff_net = ff_net
         self.validate_set_x, self.validate_set_y = validate_set
         self.x = T.matrix('x', dtype=theano.config.floatX)
-
+        self.y = T.ivector('y')
         self.classes = max(self.validate_set_y.get_value())+1
 
         shape = self.validate_set_x.get_value().shape[0]
@@ -38,6 +41,35 @@ class Validator(object):
                                             ff_net.get_passthrough(self.x),
                                             axis=1
                                 ))
+
+
+
+        self.lossfun = MinibatchSGDTeacher.get_lossfun(self, l1, l2)
+
+        self.get_loss = theano.function(
+            inputs=[],
+            outputs=self.lossfun,
+            givens={
+                self.x: self.validate_set_x,
+                self.y: self.validate_set_y,
+            }
+        )
+
+    def calculate_loss(self, returning='mean'):
+        """
+        Calculate loss function
+        :param returning: what to return
+            'max' - maximum loss function on minibatches
+            'mean' - mean loss on minibatches
+        """
+
+        loss = self.get_loss()
+        if returning == 'mean':
+            return np.mean(loss)
+        elif returning == 'max':
+            return np.max(loss)
+        else:
+            raise ValueError('Unknown returning mode')
 
     def calculate_confusion_matrix(self):
         """
