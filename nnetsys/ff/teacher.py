@@ -58,7 +58,6 @@ class MinibatchSGDTeacher(object):
 
         self.train_model = theano.function(
             inputs=[self.index],
-            outputs=self.lossfun,
             updates=self.updates,
             givens={
                 self.x: self.train_set_x[self.index*self.batch_size : (self.index+1)*self.batch_size],
