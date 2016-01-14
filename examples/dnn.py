@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import print_function
 import theano, numpy as np, pickle
 
-from nnetsys.ff import Network, Perceptron, MinibatchSGDTeacher, Validator
+from nnetsys.ff import Network, PerceptronLayer, MinibatchSGDTeacher, Validator
 
 data = pickle.load(open('../mnist.pkl', 'rb'))
 data = [(
@@ -16,11 +16,11 @@ data = [(
 
 
 nnet = Network(
-            Perceptron(28*28, 500, activation='relu', dropout=0.5),
-            Perceptron(500, 300, activation='relu', dropout=0.5),
-            Perceptron(300, 100, activation='relu', dropout=0.5),
-            Perceptron(100, 30, activation='relu', dropout=0.5),
-            Perceptron(30, 10, activation='softmax')
+            PerceptronLayer(28*28, 500, activation='relu', dropout=0.5),
+            PerceptronLayer(500, 300, activation='relu', dropout=0.5),
+            PerceptronLayer(300, 100, activation='relu', dropout=0.5),
+            PerceptronLayer(100, 30, activation='relu', dropout=0.5),
+            PerceptronLayer(30, 10, activation='softmax')
    )
 
 teacher = MinibatchSGDTeacher(nnet, data[0], batch_size=100, learning_rate=0.1)
