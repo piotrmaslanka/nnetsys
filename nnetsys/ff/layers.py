@@ -16,9 +16,7 @@ class FeedforwardLayer(object):
 
     def get_passthrough(self, x):
         """Return a function that given NIN-dimensional input x (Theano symbolic) returns
-
          Please note that x is always a minibatch - first dimension specifies number of batches
-
            NOUT-dimensional output"""
         return None
 
@@ -72,16 +70,19 @@ class ConvolutionalLayer(FeedforwardLayer):
         self.n_filters = n_filters
 
         n_in = img_channels*flt_width*flt_height
-        n_out = n_filters*flt_width*flt_height
+        n_out = img_channels*n_filters*flt_width*flt_height
 
         bound = np.sqrt(.6 / (n_in + n_out))
 
         w_bound = np.sqrt(img_channels * flt_width * flt_height)
         self.W = theano.shared( np.asarray(
-            self.rng.uniform(
-                low=-bound,
-                high=bound,
-                size=(n_filters, img_channels, flt_width, flt_height)),
+        
+        self.rng.normal(0, 0.01, size=(n_filters, img_channels, flt_width, flt_height)),
+        
+#            self.rng.uniform(
+#                low=-bound,
+#                high=bound,
+#                size=(n_filters, img_channels, flt_width, flt_height)),
             dtype=dtype), name ='W')
 
         self.B = theano.shared(np.asarray(
@@ -149,7 +150,8 @@ class PerceptronLayer(FeedforwardLayer):
             self.activation = T.tanh
         elif activation == 'relu':
             w = np.asarray(
-                self.rng.normal(0, 1 / n_in, size=(n_in, n_out)),
+                self.rng.normal(0, 0.1, size=(n_in, n_out)
+                ),
                 dtype=dtype
             )
             b = np.zeros((n_out, ), dtype=dtype) + 0.1
@@ -214,9 +216,7 @@ class PerceptronLayer(FeedforwardLayer):
 class Network(FeedforwardLayer):
     """
     A virtual layer that represents a bunch of feed-forward layers.
-
     It is used to construct feed-forward neural networks. Use it like:
-
         s = Network(Perceptron(200, 100),
                     Perceptron(100, 50),
                     Perceptron(50, 5, activation='softmax'))
@@ -225,7 +225,6 @@ class Network(FeedforwardLayer):
     def __init__(self, *layers):
         """
         Build the network.
-
         :param layers: list of layers
         """
         FeedforwardLayer.__init__(self)
